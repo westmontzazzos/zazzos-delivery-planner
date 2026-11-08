@@ -273,17 +273,18 @@ HOW TO READ THE SCREEN
   - A driver with NO time next to them is IN the store and can leave now.
 
 WHAT TO PLAN (IMPORTANT)
-- Only plan orders that need to go out soon: anything due within the next 60 minutes of NOW.
-- Orders due later than that (for example a timed order hours away) are NOT routed. Put them in "later" and leave them alone. Don't plan for them, don't pair them, don't give leave-later advice for them.
-- Exception: a later timed order can ride along only if it's due within 20 minutes of another stop on that trip and right on the way.
-- If there's only one order to go now, keep it simple: one driver, go now. No doubling, no extra advice.
+- REGULAR orders: always plan these.
+- TIMED orders: leave them out of the plan, EXCEPT when a regular order would be delivered within 15 minutes before or after the timed order's time AND the two addresses are close together / in the same direction from the store. Only then pair the timed order onto that trip.
+- A timed order that doesn't meet that test goes in "later" (the manager sends it at its time). Don't route it, don't give advice about it.
+- Two timed orders can go together only if their times are within 15 minutes of each other and they're close together / same direction.
+- Never pair stops in opposite directions from the store, no matter the times.
 
 HOW TO PLAN
 - If any drivers are IN: plan around them first. Use returning drivers only for orders the in-store drivers can't get to on time.
 - If no drivers are IN: plan around the returning drivers, in the order they come back.
 - A driver can do more than one trip. A second trip leaves when they get back (last stop + drive back to the store + 2 min). List each trip as its own entry with the same driver name, in time order.
 - Stops per trip: ${modeWord}. Never put more orders on one trip than that.
-- Within that limit: nothing late beats everything. Pair orders only when they're near each other and both stay on time. Timed orders shouldn't arrive far too early; push the leave time later or put the timed stop later in the trip.
+- Within that limit: nothing late beats everything. Pair orders only when they're close together or in the same direction from the store, and both stay on time.
 - Estimate driving with real local street geography: about 2 to 3 minutes per mile on suburban roads, plus 2 minutes per stop for the handoff.
 - All trips start from: ${store}.
 ${notes ? "- Manager notes (follow these): " + notes : ""}
@@ -454,7 +455,7 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
 
     if (Array.isArray(plan.later) && plan.later.length) {
       const lt = el("div","idle");
-      lt.appendChild(el("b", null, "Later (not planned yet)"));
+      lt.appendChild(el("b", null, "Timed orders: send at their time"));
       plan.later.forEach(x => lt.appendChild(el("div", null, "#" + (x.num ?? "?") + " " + (nice(x.name) || "Customer") + " · " + (x.kind === "timed" ? "at " : "by ") + (x.due || "?"))));
       o.appendChild(lt);
     }
