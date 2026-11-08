@@ -66,6 +66,15 @@ main{max-width:600px;margin:0 auto;padding:10px 16px 40px}
 .stepper button{width:38px;height:38px;border:0;border-radius:50%;background:#fff;font-size:20px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .stepper output{min-width:44px;text-align:center;font:400 26px/1 "Bebas Neue",sans-serif;padding-top:3px}
 
+/* Start */
+.start{padding-top:28px;text-align:center}
+.snap.big{padding:28px 16px;font-size:22px;border-radius:var(--r-tile);box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.snap.big svg{width:28px;height:28px}
+.from{margin:22px 0 0;color:var(--g600);font-size:14px}
+.from b{color:var(--text)}
+.from .linkbtn{padding:0}
+#shot{background:#fff;border:1px solid var(--g200);border-radius:var(--r);padding:12px;margin-top:12px}
+
 /* Mode */
 .seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--g100);border-radius:var(--r);padding:3px;gap:3px}
 .seg button{border:0;background:transparent;border-radius:8px;padding:10px 0;font-weight:700;color:var(--g600)}
@@ -86,6 +95,7 @@ textarea.on{display:block}
 
 /* CTA */
 .go{width:100%;border:0;border-radius:var(--r);background:var(--red);color:#fff;font:400 24px/1 "Bebas Neue",sans-serif;letter-spacing:.06em;padding:16px 0 14px;box-shadow:0 4px 14px rgba(227,16,16,.25);margin-top:4px}
+.go.hidden{display:none}
 .go:disabled{background:var(--g300);box-shadow:none;cursor:default}
 
 /* Status */
@@ -138,46 +148,30 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
   <h1>Delivery Planner</h1>
 </header>
 
-<div class="pills" role="group" aria-label="Store">
-  <button class="pill" data-store="Zazzo's Darien, 7360 IL-83, Darien, IL 60561" aria-pressed="true">Darien</button>
-  <button class="pill" data-store="Zazzo's Westmont, 200 W Ogden Ave, Westmont, IL 60559" aria-pressed="false">Westmont</button>
-</div>
 <input type="hidden" id="store" value="Zazzo's Darien, 7360 IL-83, Darien, IL 60561">
 
 <main>
   <section id="form">
-    <div class="card">
-      <p class="label">Delivery screen</p>
-      <div id="pick">
-        <label class="snap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Snap Screen
-          <input id="cam" type="file" accept="image/*" capture="environment" aria-label="Take a photo of the delivery screen">
-        </label>
-        <label class="alt"><span>or use a screenshot</span><input id="lib" type="file" accept="image/*" multiple aria-label="Choose a screenshot"></label>
-      </div>
-      <div class="shot" id="shot">
-        <img id="thumb" alt="Delivery screen">
-        <div class="meta"><b>Screen ready</b><small id="shotInfo">1 photo</small></div>
-        <button class="linkbtn" id="retake">Retake</button>
-      </div>
+    <div id="pick" class="start">
+      <label class="snap big">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Snap Screen
+        <input id="cam" type="file" accept="image/*" capture="environment" aria-label="Take a photo of the dispatch screen">
+      </label>
+      <label class="alt"><span>or use a screenshot</span><input id="lib" type="file" accept="image/*" multiple aria-label="Choose a screenshot"></label>
+      <p class="from">Leaving from <b id="storeName">Darien</b> · <button class="linkbtn" id="storeSwap">Change</button></p>
     </div>
-
-    <div class="card">
-      <p class="label">Stops per driver</p>
-      <div class="seg" role="group" aria-label="Stops per driver">
-        <button data-mode="1" aria-pressed="true">Single</button>
-        <button data-mode="2" aria-pressed="false">Double</button>
-        <button data-mode="3" aria-pressed="false">Triple</button>
-      </div>
+    <div class="shot" id="shot">
+      <img id="thumb" alt="Dispatch screen">
+      <div class="meta"><b>Screen</b><small id="shotInfo">From Darien · Single</small></div>
     </div>
-
-    <div class="card">
-      <button class="notebtn" id="noteBtn">+ Add a note</button>
-      <textarea id="notes" placeholder="e.g. Laura isn’t back until 12:30"></textarea>
+    <div class="seg hidden" role="group" aria-label="Stops per driver">
+      <button data-mode="1" aria-pressed="true">Single</button>
+      <button data-mode="2" aria-pressed="false">Double</button>
+      <button data-mode="3" aria-pressed="false">Triple</button>
     </div>
-
-    <button class="go" id="go" disabled>Plan Routes</button>
+    <textarea id="notes" class="hidden"></textarea>
+    <button class="go hidden" id="go">Plan Routes</button>
   </section>
 
   <section id="out" aria-live="polite"></section>
@@ -189,15 +183,20 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
   let files = [];
   let ctl = null;
 
-  // Store pills
-  const pills = document.querySelectorAll(".pill");
-  function setStore(v){
-    $("store").value = v;
-    pills.forEach(p => p.setAttribute("aria-pressed", String(p.dataset.store === v)));
-    try { localStorage.setItem("zz-store", v); } catch(e){}
+  // Store
+  const STORES = {
+    Darien: "Zazzo's Darien, 7360 IL-83, Darien, IL 60561",
+    Westmont: "Zazzo's Westmont, 200 W Ogden Ave, Westmont, IL 60559"
+  };
+  let storeKey = "Darien";
+  function setStore(k){
+    storeKey = STORES[k] ? k : "Darien";
+    $("store").value = STORES[storeKey];
+    $("storeName").textContent = storeKey;
+    try { localStorage.setItem("zz-store-k", storeKey); } catch(e){}
   }
-  pills.forEach(p => p.addEventListener("click", () => setStore(p.dataset.store)));
-  try { const s = localStorage.getItem("zz-store"); if (s && [...pills].some(p => p.dataset.store === s)) setStore(s); } catch(e){}
+  try { setStore(localStorage.getItem("zz-store-k") || "Darien"); } catch(e){ setStore("Darien"); }
+  $("storeSwap").onclick = () => setStore(storeKey === "Darien" ? "Westmont" : "Darien");
 
   // Stops per driver
   let mode = 1;
@@ -205,21 +204,19 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
   function setMode(m){
     mode = m;
     segs.forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.mode) === m)));
+    if (typeof updateInfo === "function") try { updateInfo(); } catch(e){}
   }
   segs.forEach(b => b.addEventListener("click", () => setMode(Number(b.dataset.mode))));
-
-  // Note
-  $("noteBtn").onclick = () => { const t = $("notes"); t.classList.toggle("on"); $("noteBtn").textContent = t.classList.contains("on") ? "− Hide note" : "+ Add a note"; if (t.classList.contains("on")) t.focus(); };
 
   // Photo
   function onFiles(list){
     files = Array.from(list || []).slice(0, 4);
     if (!files.length) return;
     $("thumb").src = URL.createObjectURL(files[0]);
-    $("shotInfo").textContent = files.length === 1 ? "1 photo" : files.length + " photos";
     $("pick").classList.add("hidden");
     $("shot").classList.add("on");
-    refresh();
+    updateInfo();
+    $("go").onclick();
   }
   $("cam").addEventListener("change", e => onFiles(e.target.files));
   $("lib").addEventListener("change", e => onFiles(e.target.files));
@@ -227,9 +224,9 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
     files = []; $("cam").value = ""; $("lib").value = "";
     $("shot").classList.remove("on"); $("pick").classList.remove("hidden"); refresh();
   }
-  $("retake").onclick = clearPhoto;
 
-  function refresh(){ $("go").disabled = !files.length; }
+  function refresh(){}
+  function updateInfo(){ $("shotInfo").textContent = "From " + storeKey + " · " + ({1:"Single",2:"Double",3:"Triple"}[mode]); }
 
   function status(msg, isErr){
     const o = $("out"); o.textContent = "";
@@ -421,7 +418,7 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
 
       const link = mapsLink(origin, d.stops);
       const nameIn = document.createElement("input"); nameIn.type = "text"; nameIn.className = "name"; nameIn.placeholder = "Driver’s name (for the text)"; nameIn.setAttribute("aria-label","Driver name");
-      if (!/^Driver /.test(label)) nameIn.value = label;
+      if (!/^Driver /.test(label)) { nameIn.value = label; nameIn.classList.add("hidden"); }
       b.appendChild(nameIn);
 
       const acts = el("div","acts");
@@ -467,8 +464,11 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
       o.appendChild(f);
     }
 
-    const again = el("button","ghost","New Screen");
-    again.onclick = () => { clearPhoto(); o.textContent = ""; window.scrollTo({top:0,behavior:"smooth"}); };
+    const again = document.createElement("label"); again.className = "snap";
+    again.textContent = "Snap New Screen";
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.setAttribute("capture","environment"); inp.setAttribute("aria-label","Snap a new screen");
+    inp.addEventListener("change", e => { setMode(1); window.scrollTo({top:0}); onFiles(e.target.files); });
+    again.appendChild(inp);
     o.appendChild(again);
     o.appendChild(el("p","foot","Drive times are estimates. No live traffic."));
     o.scrollIntoView({behavior:"smooth", block:"start"});
