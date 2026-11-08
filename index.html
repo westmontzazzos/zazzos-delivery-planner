@@ -125,6 +125,8 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
 .flags b{display:block;margin-bottom:4px}
 .flags ul{margin:0;padding-left:18px}
 .foot{text-align:center;font-size:12px;color:var(--g500);margin:6px 0 0}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);background:var(--black);color:#fff;border-radius:var(--r);padding:14px 16px;font-weight:600;text-align:center;opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:20}
+#toast.show{opacity:1;transform:none}
 .hidden{display:none !important}
 </style>
 </head>
@@ -361,6 +363,13 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
     return out.join("\n");
   }
 
+  function toast(msg){
+    let t = document.getElementById("toast");
+    if (!t) { t = document.createElement("div"); t.id = "toast"; t.setAttribute("role","status"); document.body.appendChild(t); }
+    t.textContent = msg; t.className = "show";
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.className = ""; }, 3000);
+  }
+
   function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
   function render(plan){
@@ -414,8 +423,8 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
       b.appendChild(nameIn);
 
       const acts = el("div","acts");
-      const txt = el("a","primary","Text Driver");
-      const cp = el("button",null,"Copy");
+      const cp = el("button","primary","Copy Route");
+      const txt = el("a",null,"Text");
       const mp = el("a",null,"Map");
       const box = document.createElement("textarea"); box.className = "msgbox"; box.readOnly = true;
       const msg = () => driverMsg(d, link, nameIn.value.trim());
@@ -427,10 +436,11 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
         try { await navigator.clipboard.writeText(m); ok = true; } catch(e){}
         if (!ok) { try { box.value = m; box.classList.add("on"); box.select(); ok = document.execCommand("copy"); } catch(e){} }
         if (!ok) { box.value = m; box.classList.add("on"); }
-        cp.textContent = ok ? "Copied" : "Copy below";
-        setTimeout(() => { cp.textContent = "Copy"; }, 2000);
+        cp.textContent = ok ? "Copied ✓" : "Copy below";
+        if (ok) toast("Copied. Open Messages and paste it to " + (nameIn.value.trim() || "the driver") + ".");
+        setTimeout(() => { cp.textContent = "Copy Route"; }, 2500);
       };
-      acts.append(txt, cp, mp);
+      acts.append(cp, txt, mp);
       b.append(acts, box);
       c.appendChild(b);
       o.appendChild(c);
