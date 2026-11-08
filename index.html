@@ -272,6 +272,12 @@ HOW TO READ THE SCREEN
   - A driver WITH an Est Return time is OUT. They can leave again about 2 minutes after that time.
   - A driver with NO time next to them is IN the store and can leave now.
 
+WHAT TO PLAN (IMPORTANT)
+- Only plan orders that need to go out soon: anything due within the next 60 minutes of NOW.
+- Orders due later than that (for example a timed order hours away) are NOT routed. Put them in "later" and leave them alone. Don't plan for them, don't pair them, don't give leave-later advice for them.
+- Exception: a later timed order can ride along only if it's due within 20 minutes of another stop on that trip and right on the way.
+- If there's only one order to go now, keep it simple: one driver, go now. No doubling, no extra advice.
+
 HOW TO PLAN
 - If any drivers are IN: plan around them first. Use returning drivers only for orders the in-store drivers can't get to on time.
 - If no drivers are IN: plan around the returning drivers, in the order they come back.
@@ -296,6 +302,7 @@ Reply with ONLY this JSON (no other text):
   ]}
  ],
  "idle": ["names of drivers with nothing to do"],
+ "later": [{"num": "1", "name": "HOUSE ACCOUNT", "kind": "timed", "due": "5:00 PM"}],
  "flags": ["anything unreadable, guessed, or at risk; empty array if none"]
 }
 kind is "timed" or "regular". status is one of on_time, early, tight (under 5 min to spare), late. Times like "12:14 PM". Full street addresses with city and state. If the drivers panel is empty or unreadable, use "Driver 1", "Driver 2", etc. and say so in flags.`;
@@ -445,6 +452,12 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
       o.appendChild(c);
     });
 
+    if (Array.isArray(plan.later) && plan.later.length) {
+      const lt = el("div","idle");
+      lt.appendChild(el("b", null, "Later (not planned yet)"));
+      plan.later.forEach(x => lt.appendChild(el("div", null, "#" + (x.num ?? "?") + " " + (nice(x.name) || "Customer") + " · " + (x.kind === "timed" ? "at " : "by ") + (x.due || "?"))));
+      o.appendChild(lt);
+    }
     if (idle.length) o.appendChild(el("div","idle", [...new Set(idle.map(String))].join(", ") + ": stay back for new orders"));
 
     const rp = el("div","replan");
