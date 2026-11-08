@@ -88,6 +88,28 @@ main{max-width:600px;margin:0 auto;padding:10px 16px 40px}
 .replan{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 14px}
 .replan button{border:1px solid var(--g300);background:#fff;border-radius:var(--r);padding:11px;font-weight:700}
 
+/* Review */
+.rv-head h2{font:400 30px/1 "Bebas Neue",sans-serif;letter-spacing:.04em;margin:18px 0 4px}
+.rv-head p{margin:0 0 12px;color:var(--g600);font-size:14px}
+.rv{background:#fff;border:1px solid var(--g200);border-radius:var(--r-tile);overflow:hidden;margin-bottom:12px}
+.rv-row{padding:12px 14px;border-bottom:1px solid var(--g100)}
+.rv-row:last-child{border-bottom:0}
+.rv-row.off{opacity:.45}
+.rv-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rv-who b{font-weight:700}
+.rv-skip{border:0;background:none;color:var(--g500);font-weight:600;font-size:13px;padding:4px 0}
+.rv-addr{color:var(--g600);font-size:13px;margin:1px 0 8px}
+.rv-ctrls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rv-seg{display:grid;grid-template-columns:1fr 1fr;background:var(--g100);border-radius:var(--r);padding:3px;gap:3px}
+.rv-seg button{border:0;background:transparent;border-radius:8px;padding:8px 0;font-weight:700;font-size:13px;color:var(--g600)}
+.rv-seg button[aria-pressed="true"]{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.rv-seg button:last-child[aria-pressed="true"]{background:var(--red);color:#fff}
+.rv-time{display:flex;align-items:center;border:1px solid var(--g300);border-radius:var(--r);background:var(--g50);padding:0 10px}
+.rv-time span{font-size:12px;font-weight:700;color:var(--g500);margin-right:6px;text-transform:uppercase}
+.rv-time input{border:0;background:transparent;width:100%;padding:9px 0;font-weight:600}
+.rv-drivers{font-size:14px;color:var(--g600);margin:0 2px 12px}
+.replan{grid-template-columns:repeat(3,1fr) !important}
+
 /* Note */
 .notebtn{border:0;background:none;color:var(--g600);font-weight:600;padding:2px 0;font-size:14px}
 textarea{width:100%;border:1px solid var(--g300);border-radius:var(--r);background:var(--g50);padding:11px 12px;min-height:70px;resize:vertical;margin-top:10px;display:none}
@@ -216,7 +238,8 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
     $("pick").classList.add("hidden");
     $("shot").classList.add("on");
     updateInfo();
-    $("go").onclick();
+    screen = null;
+    readScreen();
   }
   $("cam").addEventListener("change", e => onFiles(e.target.files));
   $("lib").addEventListener("change", e => onFiles(e.target.files));
@@ -256,83 +279,169 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
     try { return JSON.parse(txt.slice(a, b + 1)); } catch(e){ const x = new Error("bad json"); x.code = "invalid_json"; throw x; }
   }
 
-  function buildPrompt(){
+  const RULES = 'WHAT TO PLAN (IMPORTANT)\n- REGULAR orders: always plan these.\n- TIMED orders: leave them out of the plan, EXCEPT when a regular order would be delivered within 15 minutes before or after the timed order\'s time AND the two addresses are close together / in the same direction from the store. Only then pair the timed order onto that trip.\n- A timed order that doesn\'t meet that test goes in "later" (the manager sends it at its time). Don\'t route it, don\'t give advice about it.\n- Two timed orders can go together only if their times are within 15 minutes of each other and they\'re close together / same direction.\n- Never pair stops in opposite directions from the store, no matter the times.\n\nHOW TO PLAN\n- If any drivers are IN: plan around them first. Use returning drivers only for orders the in-store drivers can\'t get to on time.\n- If no drivers are IN: plan around the returning drivers, in the order they come back.\n- A driver can do more than one trip. A second trip leaves when they get back (last stop + drive back to the store + 2 min). List each trip as its own entry with the same driver name, in time order.\n- Within that limit: nothing late beats everything. Pair orders only when they\'re close together or in the same direction from the store, and both stay on time.\n- Estimate driving with real local street geography: about 2 to 3 minutes per mile on suburban roads, plus 2 minutes per stop for the handoff.';
+  const PLAN_JSON = 'Reply with ONLY this JSON (no other text):\n{\n "summary": "one plain sentence about the plan",\n "suggest": null,\n "suggest_reason": "short reason if suggest is set, else empty",\n "drivers": [\n  {"driver": "Emily", "status_now": "In store" or "Back 12:18 PM", "leave_at": "12:20 PM", "note": "short why, plain words", "stops": [\n    {"num": "10", "name": "ROCKS, D", "address": "7730 Eleanor Pl, Willowbrook, IL 60527", "kind": "regular", "due": "1:01 PM", "eta": "12:23 PM", "status": "on_time"}\n  ]}\n ],\n "idle": ["names of drivers with nothing to do"],\n "later": [{"num": "1", "name": "HOUSE ACCOUNT", "kind": "timed", "due": "5:00 PM"}],\n "flags": ["anything unreadable, guessed, or at risk; empty array if none"]\n}\nkind is "timed" or "regular". status is one of on_time, early, tight (under 5 min to spare), late. Times like "12:14 PM". Full street addresses with city and state. If the drivers panel is empty or unreadable, use "Driver 1", "Driver 2", etc. and say so in flags.';
+
+  function readPrompt(){
+    return `You are reading a pizza restaurant's POS dispatch screen (photo). Near the store in the western Chicago suburbs (DuPage County, IL).
+
+Read it and reply with ONLY this JSON:
+{
+ "now": "4:43 PM",
+ "drivers": [{"name": "Emily", "back": "12:24 PM"}],
+ "orders": [{"num": "59", "name": "LAVORATO", "address": "6914 Sierra Dr, Darien, IL 60561", "kind": "regular", "time": "4:53 PM", "elp": 35}],
+ "flags": []
+}
+Rules:
+- "now": the clock in the top-left corner if shown. If not shown, work it out from the header line like "Onl-Deliv: 60 = 5:43 pm" (that means now + 60 min = 5:43, so now is 4:43). If neither, use ${nowStr()}.
+- "drivers": from the left Driver panel. Drop a leading Z from names (ZEMILY = Emily). "back" = the Est Return time if shown, or null if no time (that driver is in the store). Empty array if no panel is visible.
+- "orders": every row. "kind" is "timed" if there's a green check in the Def column, else "regular". "time" is the Time column. "elp" is the elp number.
+- Addresses are often cut off or misspelled. Complete them to the real full street address with city, state and zip (e.g. "WILLOWBR(" = Willowbrook, "BUI" = Burr Ridge, "WESTM" = Westmont, "CLARE" = Clarendon Hills).
+- "flags": anything you couldn't read or had to guess. Empty if none.`;
+  }
+
+  function planPrompt(){
     const store = $("store").value;
     const notes = $("notes").value.trim();
     const modeWord = {1:"SINGLE (1 order per driver per trip)", 2:"DOUBLE (at most 2 orders per trip)", 3:"TRIPLE (at most 3 orders per trip)"}[mode];
-    return `You are the delivery dispatcher for a pizza restaurant in the western Chicago suburbs (DuPage County, IL). The image(s) show the restaurant's POS dispatch screen.
+    const sc = screen;
+    const drv = (sc.drivers || []).length
+      ? sc.drivers.map(d => "- " + d.name + ": " + (d.back ? "OUT, back at " + d.back + " (can leave about 2 min after)" : "IN the store, can leave now")).join("\n")
+      : "- No driver panel on the screen. Assume up to 3 drivers are available now, named Driver 1, Driver 2, Driver 3. Use only as many as needed.";
+    const ord = sc.orders.map(o => "- #" + o.num + " " + o.name + " | " + o.address + " | " + (o.kind === "timed" ? "TIMED: arrive AT " : "REGULAR: arrive BY ") + o.time).join("\n");
+    return `You are the delivery dispatcher for a pizza restaurant in the western Chicago suburbs (DuPage County, IL). The manager has confirmed this list, so treat it as correct (including which orders are timed).
 
-HOW TO READ THE SCREEN
-- Top-left corner shows the current time (e.g. "12:13 pm"). Use it as NOW. If not visible, NOW = ${nowStr()}.
-- ORDERS (right side). Columns: # (order number), Name, Def, Address, Time, elp.
-  - Green check in Def = TIMED order: arrive AT the Time shown. A few minutes early is fine; more than ~10 min early is "early". Never late.
-  - No check = REGULAR order: Time column is its deadline (60 min after it came in). Must arrive by then.
-  - Addresses may be cut off or misspelled ("WILL(" = Willowbrook, "CLARE" = Clarendon Hills, "WESTMOI" = Westmont, "QUINCEY" = Quincy St). Fix to real addresses near the store. Ignore header lines like "Delivery: 45 = 12:58 pm".
-- DRIVERS (left panel, columns Driver / Out / Est Return). Names usually start with Z; drop it ("ZEMILY" = Emily).
-  - A driver WITH an Est Return time is OUT. They can leave again about 2 minutes after that time.
-  - A driver with NO time next to them is IN the store and can leave now.
+NOW: ${sc.now || nowStr()}
 
-WHAT TO PLAN (IMPORTANT)
-- REGULAR orders: always plan these.
-- TIMED orders: leave them out of the plan, EXCEPT when a regular order would be delivered within 15 minutes before or after the timed order's time AND the two addresses are close together / in the same direction from the store. Only then pair the timed order onto that trip.
-- A timed order that doesn't meet that test goes in "later" (the manager sends it at its time). Don't route it, don't give advice about it.
-- Two timed orders can go together only if their times are within 15 minutes of each other and they're close together / same direction.
-- Never pair stops in opposite directions from the store, no matter the times.
+DRIVERS
+${drv}
 
-HOW TO PLAN
-- If any drivers are IN: plan around them first. Use returning drivers only for orders the in-store drivers can't get to on time.
-- If no drivers are IN: plan around the returning drivers, in the order they come back.
-- A driver can do more than one trip. A second trip leaves when they get back (last stop + drive back to the store + 2 min). List each trip as its own entry with the same driver name, in time order.
+ORDERS
+${ord}
+
+TIMED = must arrive AT that time (a few minutes early is fine, never late). REGULAR = must arrive BY that time.
+
+` + RULES + `
 - Stops per trip: ${modeWord}. Never put more orders on one trip than that.
-- Within that limit: nothing late beats everything. Pair orders only when they're close together or in the same direction from the store, and both stay on time.
-- Estimate driving with real local street geography: about 2 to 3 minutes per mile on suburban roads, plus 2 minutes per stop for the handoff.
 - All trips start from: ${store}.
 ${notes ? "- Manager notes (follow these): " + notes : ""}
 
 WHEN TO SUGGEST DOUBLING OR TRIPLING
-Set "suggest" to "double" (or "triple" if already double) when, at the current setting, any order ends up late or tight, OR the orders on screen fill about half the list or more (roughly 6 or more waiting). Otherwise set it to null. Never change the setting yourself; plan at ${modeWord} and only suggest.
+Set "suggest" to "double" (or "triple" if already double) when, at the current setting, any order ends up late or tight, OR there are about 6 or more regular orders waiting. Otherwise null. Plan at ${modeWord}; only suggest.
 
-Reply with ONLY this JSON (no other text):
-{
- "summary": "one plain sentence about the plan",
- "suggest": null,
- "suggest_reason": "short reason if suggest is set, else empty",
- "drivers": [
-  {"driver": "Emily", "status_now": "In store" or "Back 12:18 PM", "leave_at": "12:20 PM", "note": "short why, plain words", "stops": [
-    {"num": "10", "name": "ROCKS, D", "address": "7730 Eleanor Pl, Willowbrook, IL 60527", "kind": "regular", "due": "1:01 PM", "eta": "12:23 PM", "status": "on_time"}
-  ]}
- ],
- "idle": ["names of drivers with nothing to do"],
- "later": [{"num": "1", "name": "HOUSE ACCOUNT", "kind": "timed", "due": "5:00 PM"}],
- "flags": ["anything unreadable, guessed, or at risk; empty array if none"]
-}
-kind is "timed" or "regular". status is one of on_time, early, tight (under 5 min to spare), late. Times like "12:14 PM". Full street addresses with city and state. If the drivers panel is empty or unreadable, use "Driver 1", "Driver 2", etc. and say so in flags.`;
+` + PLAN_JSON;
   }
 
-  $("go").onclick = async () => {
-    if (!files.length) return;
+  let screen = null;
+
+  function busy(msg){
     ctl = new AbortController();
-    $("go").disabled = true;
     const o = $("out"); o.textContent = "";
     const box = document.createElement("div"); box.className = "status";
     const sp = document.createElement("div"); sp.className = "spin";
-    const t = document.createElement("div"); t.textContent = "Reading the screen and planning routes…";
+    const t = document.createElement("div"); t.textContent = msg;
     const stop = document.createElement("button"); stop.className = "ghost"; stop.textContent = "Cancel"; stop.onclick = () => ctl.abort();
     box.append(sp, t, stop); o.appendChild(box);
     o.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+  function fail(e){
+    const o = $("out"); const code = e && e.code;
+    if (e && e.name === "AbortError") { o.textContent = ""; }
+    else if (code === "rate_limited") status("Too many requests right now. Wait a minute and try again.", true);
+    else if (code === "setup") status("The planner isn’t set up yet (missing key on Netlify).", true);
+    else if (code === "invalid_json") status("Couldn’t read that. Try again or retake the photo closer.", true);
+    else status("Something went wrong. Try again.", true);
+  }
+
+  // Step 1: read the screen
+  async function readScreen(){
+    if (!files.length) return;
+    busy("Reading the screen…");
     try {
       const imgs = await Promise.all(files.map(shrink));
-      const plan = await callPlan(buildPrompt(), imgs, ctl.signal);
+      const r = await callPlan(readPrompt(), imgs, ctl.signal);
+      if (!r || !Array.isArray(r.orders)) throw Object.assign(new Error("bad"), {code:"invalid_json"});
+      screen = { now: r.now || "", drivers: Array.isArray(r.drivers) ? r.drivers : [], orders: r.orders.map(o => ({
+        num: String(o.num ?? "?"), name: String(o.name || ""), address: String(o.address || ""),
+        kind: o.kind === "timed" ? "timed" : "regular", time: String(o.time || ""), skip: false
+      })), flags: Array.isArray(r.flags) ? r.flags : [] };
+      renderReview();
+    } catch(e){ fail(e); }
+  }
+
+  // Step 2: confirm list (override timed / times)
+  function renderReview(){
+    const o = $("out"); o.textContent = "";
+    const head = el("div","rv-head");
+    head.appendChild(el("h2", null, "Check the tickets"));
+    head.appendChild(el("p", null, "Tap Timed for any timed order the screen missed, and fix any time. Then plan."));
+    o.appendChild(head);
+
+    const list = el("div","rv");
+    screen.orders.forEach(ord => {
+      const row = el("div","rv-row" + (ord.skip ? " off" : ""));
+      const top = el("div","rv-top");
+      const who = el("div","rv-who");
+      who.appendChild(el("b", null, "#" + ord.num));
+      who.appendChild(el("span", null, " " + nice(ord.name)));
+      top.appendChild(who);
+      const skip = el("button","rv-skip", ord.skip ? "Add back" : "Skip");
+      skip.onclick = () => { ord.skip = !ord.skip; renderReview(); };
+      top.appendChild(skip);
+      row.appendChild(top);
+      row.appendChild(el("div","rv-addr", shortAddr(ord.address)));
+
+      const ctrls = el("div","rv-ctrls");
+      const seg = el("div","rv-seg");
+      [["regular","Regular"],["timed","Timed"]].forEach(([k, t]) => {
+        const bt = el("button", null, t);
+        bt.setAttribute("aria-pressed", String(ord.kind === k));
+        bt.onclick = () => {
+          const was = ord.kind; ord.kind = k; renderReview();
+          if (k === "timed" && was !== "timed") { const inp = document.querySelector('[data-num="' + ord.num + '"]'); if (inp) { inp.focus(); inp.select(); } }
+        };
+        seg.appendChild(bt);
+      });
+      ctrls.appendChild(seg);
+      const tw = el("label","rv-time");
+      tw.appendChild(el("span", null, ord.kind === "timed" ? "At" : "By"));
+      const ti = document.createElement("input"); ti.type = "text"; ti.value = ord.time; ti.inputMode = "text"; ti.setAttribute("aria-label","Time for #" + ord.num); ti.dataset.num = ord.num;
+      ti.addEventListener("input", () => { ord.time = ti.value.trim(); });
+      tw.appendChild(ti);
+      ctrls.appendChild(tw);
+      row.appendChild(ctrls);
+      list.appendChild(row);
+    });
+    o.appendChild(list);
+
+    if (screen.drivers.length) {
+      o.appendChild(el("p","rv-drivers", "Drivers: " + screen.drivers.map(d => d.name + (d.back ? " (back " + d.back + ")" : " (in)")).join(", ")));
+    }
+    if (screen.flags.length) {
+      const f = el("div","flags"); f.appendChild(el("b", null, "Double-check"));
+      const ul = document.createElement("ul"); screen.flags.forEach(x => ul.appendChild(el("li", null, String(x)))); f.appendChild(ul);
+      o.appendChild(f);
+    }
+    const go = el("button","go","Plan Routes");
+    go.onclick = () => runPlan();
+    o.appendChild(go);
+    if (!document.activeElement || document.activeElement === document.body) o.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+
+  // Step 3: plan from the confirmed list
+  async function runPlan(){
+    if (!screen) return readScreen();
+    const keep = screen.orders.filter(x => !x.skip);
+    if (!keep.length) { status("No tickets left to plan.", true); return; }
+    busy("Planning routes…");
+    try {
+      const saved = screen.orders; screen.orders = keep;
+      const prompt = planPrompt(); screen.orders = saved;
+      const plan = await callPlan(prompt, [], ctl.signal);
       render(plan);
-    } catch(e){
-      const code = e && e.code;
-      if (e && e.name === "AbortError") { o.textContent = ""; }
-      else if (code === "rate_limited") status("Too many requests right now. Wait a minute and try again.", true);
-      else if (code === "setup") status("The planner isn’t set up yet (missing key on Netlify).", true);
-      else if (code === "invalid_json") status("Couldn’t read that photo. Try again or retake it closer.", true);
-      else status("Something went wrong. Tap Plan Routes to try again.", true);
-    } finally { refresh(); }
-  };
+    } catch(e){ fail(e); }
+  }
+  $("go").onclick = runPlan;
 
   function mapsLink(origin, stops){
     if (!stops.length) return null;
@@ -467,6 +576,9 @@ kind is "timed" or "regular". status is one of on_time, early, tight (under 5 mi
       btn.onclick = () => { setMode(m); $("go").onclick(); };
       rp.appendChild(btn);
     });
+    const ed = el("button", null, "Edit Tickets");
+    ed.onclick = () => renderReview();
+    rp.appendChild(ed);
     o.appendChild(rp);
 
     if (Array.isArray(plan.flags) && plan.flags.length) {

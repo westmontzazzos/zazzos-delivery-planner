@@ -13,7 +13,7 @@ export default async (req: Request, context: Context) => {
 
   const images: string[] = Array.isArray(body.images) ? body.images.slice(0, 4) : []
   const prompt = String(body.prompt || "").slice(0, 8000)
-  if (!images.length || !prompt) return Response.json({ error: "Missing photo" }, { status: 400 })
+  if (!prompt) return Response.json({ error: "Missing request" }, { status: 400 })
 
   const content: any[] = images.map((data) => ({
     type: "image",
