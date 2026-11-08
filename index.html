@@ -64,6 +64,19 @@ main{max-width:600px;margin:0 auto;padding:10px 16px 40px}
 .stepper button{width:38px;height:38px;border:0;border-radius:50%;background:#fff;font-size:20px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .stepper output{min-width:44px;text-align:center;font:400 26px/1 "Bebas Neue",sans-serif;padding-top:3px}
 
+/* Mode */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--g100);border-radius:var(--r);padding:3px;gap:3px}
+.seg button{border:0;background:transparent;border-radius:8px;padding:10px 0;font-weight:700;color:var(--g600)}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.suggest{background:var(--black);color:#fff;border-radius:var(--r);padding:14px 16px;margin:14px 0}
+.suggest p{margin:0 0 10px}
+.suggest .btns{display:flex;gap:8px}
+.suggest button{flex:1;border:0;border-radius:var(--r);padding:11px;font-weight:700}
+.suggest .yes{background:var(--red);color:#fff}
+.suggest .no{background:#333;color:#fff}
+.replan{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 14px}
+.replan button{border:1px solid var(--g300);background:#fff;border-radius:var(--r);padding:11px;font-weight:700}
+
 /* Note */
 .notebtn{border:0;background:none;color:var(--g600);font-weight:600;padding:2px 0;font-size:14px}
 textarea{width:100%;border:1px solid var(--g300);border-radius:var(--r);background:var(--g50);padding:11px 12px;min-height:70px;resize:vertical;margin-top:10px;display:none}
@@ -146,12 +159,12 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
       </div>
     </div>
 
-    <div class="card row">
-      <p class="label">Drivers available</p>
-      <div class="stepper">
-        <button type="button" id="minus" aria-label="Fewer drivers">−</button>
-        <output id="count">2</output>
-        <button type="button" id="plus" aria-label="More drivers">+</button>
+    <div class="card">
+      <p class="label">Stops per driver</p>
+      <div class="seg" role="group" aria-label="Stops per driver">
+        <button data-mode="1" aria-pressed="true">Single</button>
+        <button data-mode="2" aria-pressed="false">Double</button>
+        <button data-mode="3" aria-pressed="false">Triple</button>
       </div>
     </div>
 
@@ -170,7 +183,6 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
 (function(){
   const $ = id => document.getElementById(id);
   let files = [];
-  let drivers = 2;
   let ctl = null;
 
   // Store pills
@@ -183,12 +195,14 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
   pills.forEach(p => p.addEventListener("click", () => setStore(p.dataset.store)));
   try { const s = localStorage.getItem("zz-store"); if (s && [...pills].some(p => p.dataset.store === s)) setStore(s); } catch(e){}
 
-  // Drivers
-  function setDrivers(n){ drivers = Math.max(1, Math.min(10, n)); $("count").textContent = drivers; try{localStorage.setItem("zz-drivers",drivers)}catch(e){} }
-  try { const d = parseInt(localStorage.getItem("zz-drivers"),10); if (d>=1 && d<=10) drivers = d; } catch(e){}
-  setDrivers(drivers);
-  $("minus").onclick = () => setDrivers(drivers-1);
-  $("plus").onclick = () => setDrivers(drivers+1);
+  // Stops per driver
+  let mode = 1;
+  const segs = document.querySelectorAll(".seg button");
+  function setMode(m){
+    mode = m;
+    segs.forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.mode) === m)));
+  }
+  segs.forEach(b => b.addEventListener("click", () => setMode(Number(b.dataset.mode))));
 
   // Note
   $("noteBtn").onclick = () => { const t = $("notes"); t.classList.toggle("on"); $("noteBtn").textContent = t.classList.contains("on") ? "− Hide note" : "+ Add a note"; if (t.classList.contains("on")) t.focus(); };
@@ -244,43 +258,47 @@ ol.stops li::before{content:counter(n);width:26px;height:26px;border-radius:50%;
   function buildPrompt(){
     const store = $("store").value;
     const notes = $("notes").value.trim();
-    return `You are the delivery dispatcher for a pizza restaurant in the western Chicago suburbs (DuPage County, IL). The image(s) show the restaurant's POS delivery screen.
+    const modeWord = {1:"SINGLE (1 order per driver per trip)", 2:"DOUBLE (at most 2 orders per trip)", 3:"TRIPLE (at most 3 orders per trip)"}[mode];
+    return `You are the delivery dispatcher for a pizza restaurant in the western Chicago suburbs (DuPage County, IL). The image(s) show the restaurant's POS dispatch screen.
 
 HOW TO READ THE SCREEN
-- Columns: # (order number), Name, Def, Address, Time, elp.
-- A green check mark in the Def column = TIMED order. It must arrive AT the time in the Time column (not much earlier, never late). A few minutes early is OK; more than ~10 min early is "early".
-- No check mark = REGULAR order. It must arrive within 60 minutes of when it came in. The "elp" column = minutes elapsed since it came in. For regular orders the Time column already shows the deadline (came in + 60 min); use it.
-- The top-left corner of the screen shows the current time (e.g. "12:13 pm"). If visible, use THAT as the current time instead of the one below.
-- A Driver panel on the left may list drivers already out, with "Est Return" times. Those drivers can't leave until they're back (allow ~2 min to load). Treat them as available at their return time, in addition to the drivers available now. Use their names (e.g. "Emily" for ZEMILY; drop a leading Z) as the driver label in "note".
-- Addresses may be cut off or misspelled (e.g. "WILLOWBROOK" cut to "WILL(", "CLARE" = Clarendon Hills, "QUINCEY" = Quincy St). Fix them to real addresses near the store. Header lines like "Delivery: 45 = 12:16 pm" are quote times; ignore them.
+- Top-left corner shows the current time (e.g. "12:13 pm"). Use it as NOW. If not visible, NOW = ${nowStr()}.
+- ORDERS (right side). Columns: # (order number), Name, Def, Address, Time, elp.
+  - Green check in Def = TIMED order: arrive AT the Time shown. A few minutes early is fine; more than ~10 min early is "early". Never late.
+  - No check = REGULAR order: Time column is its deadline (60 min after it came in). Must arrive by then.
+  - Addresses may be cut off or misspelled ("WILL(" = Willowbrook, "CLARE" = Clarendon Hills, "WESTMOI" = Westmont, "QUINCEY" = Quincy St). Fix to real addresses near the store. Ignore header lines like "Delivery: 45 = 12:58 pm".
+- DRIVERS (left panel, columns Driver / Out / Est Return). Names usually start with Z; drop it ("ZEMILY" = Emily).
+  - A driver WITH an Est Return time is OUT. They can leave again about 2 minutes after that time.
+  - A driver with NO time next to them is IN the store and can leave now.
 
-CURRENT SITUATION
-- Current time: ${nowStr()} (photo taken just now).
-- All drivers leave from: ${store}.
-- Drivers available right now: ${drivers}.
-${notes ? "- Manager notes: " + notes : ""}
+HOW TO PLAN
+- If any drivers are IN: plan around them first. Use returning drivers only for orders the in-store drivers can't get to on time.
+- If no drivers are IN: plan around the returning drivers, in the order they come back.
+- A driver can do more than one trip. A second trip leaves when they get back (last stop + drive back to the store + 2 min). List each trip as its own entry with the same driver name, in time order.
+- Stops per trip: ${modeWord}. Never put more orders on one trip than that.
+- Within that limit: nothing late beats everything. Pair orders only when they're near each other and both stay on time. Timed orders shouldn't arrive far too early; push the leave time later or put the timed stop later in the trip.
+- Estimate driving with real local street geography: about 2 to 3 minutes per mile on suburban roads, plus 2 minutes per stop for the handoff.
+- All trips start from: ${store}.
+${notes ? "- Manager notes (follow these): " + notes : ""}
 
-YOUR JOB
-Assign every order to a driver and order each driver's stops so that:
-1. Nothing is late. This beats everything.
-2. Double up orders that are near each other and whose deadlines fit one trip. Don't send a driver out for one order if it rides along with another and stays on time.
-3. Use fewer drivers when it doesn't risk lateness (idle drivers stay back for new orders), but use more if needed to stay on time.
-4. Timed orders shouldn't arrive far too early; have that driver leave later or put the timed stop later in the run.
-Estimate driving with real local street geography: about 2 to 3 minutes per mile on suburban roads, plus 2 minutes per stop for the handoff. Give a leave time for each driver (now or later). If an order can't be made on time with the drivers given, say so and give the best option.
+WHEN TO SUGGEST DOUBLING OR TRIPLING
+Set "suggest" to "double" (or "triple" if already double) when, at the current setting, any order ends up late or tight, OR the orders on screen fill about half the list or more (roughly 6 or more waiting). Otherwise set it to null. Never change the setting yourself; plan at ${modeWord} and only suggest.
 
 Reply with ONLY this JSON (no other text):
 {
- "summary": "one plain sentence, e.g. '2 drivers needed; driver 3 and 4 stay back.'",
+ "summary": "one plain sentence about the plan",
+ "suggest": null,
+ "suggest_reason": "short reason if suggest is set, else empty",
  "drivers": [
-  {"driver": 1, "leave_at": "12:10 PM", "note": "short why, plain words", "stops": [
-    {"num": "3", "name": "MADEJ", "address": "7850 S Quincy St, Willowbrook, IL 60527", "kind": "timed", "due": "12:15 PM", "eta": "12:14 PM", "status": "on_time"}
+  {"driver": "Emily", "status_now": "In store" or "Back 12:18 PM", "leave_at": "12:20 PM", "note": "short why, plain words", "stops": [
+    {"num": "10", "name": "ROCKS, D", "address": "7730 Eleanor Pl, Willowbrook, IL 60527", "kind": "regular", "due": "1:01 PM", "eta": "12:23 PM", "status": "on_time"}
   ]}
  ],
+ "idle": ["names of drivers with nothing to do"],
  "flags": ["anything unreadable, guessed, or at risk; empty array if none"]
 }
-Rules for the JSON: include every driver 1..${drivers}; a driver with no orders gets "stops": [] and "note": "Stays back". kind is "timed" or "regular". status is one of on_time, early, tight (under 5 min to spare), late. Times like "12:14 PM". Full street addresses with city and state.`;
+kind is "timed" or "regular". status is one of on_time, early, tight (under 5 min to spare), late. Times like "12:14 PM". Full street addresses with city and state. If the drivers panel is empty or unreadable, use "Driver 1", "Driver 2", etc. and say so in flags.`;
   }
-
 
   $("go").onclick = async () => {
     if (!files.length) return;
@@ -349,18 +367,30 @@ Rules for the JSON: include every driver 1..${drivers}; a driver with no orders 
     const o = $("out"); o.textContent = "";
     if (!plan || !Array.isArray(plan.drivers)) { status("Couldn’t build a plan from that photo. Try again.", true); return; }
     if (plan.summary) o.appendChild(el("p","summary", String(plan.summary)));
+    const next = plan.suggest === "triple" ? 3 : (plan.suggest === "double" ? 2 : 0);
+    if (next && next > mode) {
+      const sg = el("div","suggest");
+      sg.appendChild(el("p", null, (plan.suggest_reason ? plan.suggest_reason + " " : "") + (next === 2 ? "Double up the deliveries?" : "Triple up the deliveries?")));
+      const bt = el("div","btns");
+      const yes = el("button","yes", next === 2 ? "Double Up" : "Triple Up");
+      const no = el("button","no","Keep as is");
+      yes.onclick = () => { setMode(next); $("go").onclick(); };
+      no.onclick = () => sg.remove();
+      bt.append(yes, no); sg.appendChild(bt); o.appendChild(sg);
+    }
     const origin = $("store").value;
     const active = plan.drivers.filter(d => Array.isArray(d.stops) && d.stops.length);
-    const idle = plan.drivers.filter(d => !Array.isArray(d.stops) || !d.stops.length);
+    const idle = [...(Array.isArray(plan.idle) ? plan.idle : []), ...plan.drivers.filter(d => !Array.isArray(d.stops) || !d.stops.length).map(d => d.driver)].filter(Boolean);
 
     active.forEach(d => {
       const c = el("div","drv");
       const h = el("div","drv-h");
-      h.appendChild(el("h2", null, "Driver " + (d.driver ?? "")));
+      const label = (typeof d.driver === "number" || /^\d+$/.test(String(d.driver))) ? "Driver " + d.driver : String(d.driver || "Driver");
+      h.appendChild(el("h2", null, label));
       h.appendChild(el("span","leave", "Leave " + (d.leave_at || "now")));
       c.appendChild(h);
       const b = el("div","drv-b");
-      if (d.note) b.appendChild(el("p","why", String(d.note)));
+      if (d.note || d.status_now) b.appendChild(el("p","why", [d.status_now, d.note].filter(Boolean).join(" · ")));
       const ol = el("ol","stops");
       d.stops.forEach(s => {
         const li = document.createElement("li");
@@ -380,6 +410,7 @@ Rules for the JSON: include every driver 1..${drivers}; a driver with no orders 
 
       const link = mapsLink(origin, d.stops);
       const nameIn = document.createElement("input"); nameIn.type = "text"; nameIn.className = "name"; nameIn.placeholder = "Driver’s name (for the text)"; nameIn.setAttribute("aria-label","Driver name");
+      if (!/^Driver /.test(label)) nameIn.value = label;
       b.appendChild(nameIn);
 
       const acts = el("div","acts");
@@ -405,7 +436,15 @@ Rules for the JSON: include every driver 1..${drivers}; a driver with no orders 
       o.appendChild(c);
     });
 
-    if (idle.length) o.appendChild(el("div","idle", idle.map(d => "Driver " + d.driver).join(", ") + ": stay back for new orders"));
+    if (idle.length) o.appendChild(el("div","idle", [...new Set(idle.map(String))].join(", ") + ": stay back for new orders"));
+
+    const rp = el("div","replan");
+    [[1,"Single"],[2,"Double Up"],[3,"Triple Up"]].filter(([m]) => m !== mode).forEach(([m, t]) => {
+      const btn = el("button", null, t);
+      btn.onclick = () => { setMode(m); $("go").onclick(); };
+      rp.appendChild(btn);
+    });
+    o.appendChild(rp);
 
     if (Array.isArray(plan.flags) && plan.flags.length) {
       const f = el("div","flags");
