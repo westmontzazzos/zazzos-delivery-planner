@@ -1,18 +1,15 @@
 import type { Config, Context } from "@netlify/functions"
 
 // Reads the delivery-screen photo(s) with Claude and returns the route plan text.
-// Needs two environment variables in Netlify: ANTHROPIC_API_KEY and APP_PIN.
+// Needs one environment variable in Netlify: ANTHROPIC_API_KEY.
 export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return Response.json({ error: "POST only" }, { status: 405 })
 
   const key = Netlify.env.get("ANTHROPIC_API_KEY")
-  const pinSet = Netlify.env.get("APP_PIN")
-  if (!key || !pinSet) return Response.json({ error: "Server not set up yet" }, { status: 500 })
+  if (!key) return Response.json({ error: "Server not set up yet" }, { status: 500 })
 
   let body: any
   try { body = await req.json() } catch { return Response.json({ error: "Bad request" }, { status: 400 }) }
-
-  if (String(body.pin || "") !== pinSet) return Response.json({ error: "Wrong PIN" }, { status: 401 })
 
   const images: string[] = Array.isArray(body.images) ? body.images.slice(0, 4) : []
   const prompt = String(body.prompt || "").slice(0, 8000)

@@ -154,16 +154,6 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 
   function refresh(){ $("go").disabled = !files.length; }
 
-  function getPin(force){
-    let pin = null;
-    try { pin = localStorage.getItem("zz-pin"); } catch(e){}
-    if (!pin || force) {
-      pin = (prompt(force ? "Wrong PIN. Enter the planner PIN:" : "Enter the planner PIN:") || "").trim();
-      if (pin) { try { localStorage.setItem("zz-pin", pin); } catch(e){} }
-    }
-    return pin;
-  }
-
   async function shrink(file){
     const url = URL.createObjectURL(file);
     try {
@@ -175,13 +165,10 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
     } finally { URL.revokeObjectURL(url); }
   }
 
-  async function callPlan(prompt, imgs, signal, retry){
-    const pin = getPin(retry);
-    if (!pin) { const e = new Error("no pin"); e.code = "no_pin"; throw e; }
-    const res = await fetch("/api/plan", { method: "POST", headers: {"Content-Type":"application/json"}, signal, body: JSON.stringify({ pin, prompt, images: imgs }) });
-    if (res.status === 401 && !retry) return callPlan(prompt, imgs, signal, true);
+  async function callPlan(prompt, imgs, signal){
+    const res = await fetch("/api/plan", { method: "POST", headers: {"Content-Type":"application/json"}, signal, body: JSON.stringify({ prompt, images: imgs }) });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { const e = new Error(data.error || "error"); e.code = res.status === 401 ? "bad_pin" : (res.status === 429 ? "rate_limited" : "server"); throw e; }
+    if (!res.ok) { const e = new Error(data.error || "error"); e.code = res.status === 429 ? "rate_limited" : "server"; throw e; }
     const txt = String(data.text || "").replace(/```json|```/g, "").trim();
     const a = txt.indexOf("{"), b = txt.lastIndexOf("}");
     try { return JSON.parse(txt.slice(a, b + 1)); } catch(e){ const x = new Error("bad json"); x.code = "invalid_json"; throw x; }
@@ -245,12 +232,11 @@ Rules for the JSON: include every driver 1..${drivers}; a driver with no orders 
     o.append(p, stop);
     try {
       const imgs = await Promise.all(files.map(shrink));
-      const plan = await callPlan(buildPrompt(), imgs, ctl.signal, false);
+      const plan = await callPlan(buildPrompt(), imgs, ctl.signal);
       render(plan);
     } catch(e){
       const code = e && e.code;
       if (e && e.name === "AbortError") { o.textContent = ""; }
-      else if (code === "no_pin" || code === "bad_pin") status("PIN needed. Tap Plan routes and enter the PIN.", true);
       else if (code === "rate_limited") status("Too many requests right now. Wait a minute and try again.", true);
       else if (code === "invalid_json") status("Couldn’t build a plan from that photo. Try again or retake it closer.", true);
       else status("Something went wrong. Tap Plan routes to try again.", true);
