@@ -294,7 +294,7 @@ Read it and reply with ONLY this JSON:
 }
 Rules:
 - "now": the clock in the top-left corner if shown. If not shown, work it out from the header line like "Onl-Deliv: 60 = 5:43 pm" (that means now + 60 min = 5:43, so now is 4:43). If neither, use ${nowStr()}.
-- "drivers": from the left Driver panel. Drop a leading Z from names (ZEMILY = Emily). "back" = the Est Return time if shown, or null if no time (that driver is in the store). Empty array if no panel is visible.
+- "drivers": from the left Driver panel, in the SAME ORDER as on screen (top to bottom). Drop a leading Z from names (ZEMILY = Emily). "back" = the Est Return time if shown, or null if no time (that driver is in the store). Empty array if no panel is visible.
 - "orders": every row. "kind" is "timed" if there's a green check in the Def column, else "regular". "time" is the Time column. "elp" is the elp number.
 - Addresses are often cut off or misspelled. Complete them to the real full street address with city, state and zip (e.g. "WILLOWBR(" = Willowbrook, "BUI" = Burr Ridge, "WESTM" = Westmont, "CLARE" = Clarendon Hills).
 - "flags": anything you couldn't read or had to guess. Empty if none.`;
@@ -322,9 +322,12 @@ ${ord}
 TIMED = must arrive AT that time (a few minutes early is fine, never late). REGULAR = must arrive BY that time.
 
 DRIVER RULES (STRICT)
+- The driver list is a rotation, in order. The driver at the top is next up, then the next, and so on. As drivers come back they move up the list.
+- Hand out runs in that order: first run to the first available driver, second run to the next, etc.
 - Use ONLY the drivers listed above. Never invent a driver (no "Driver 4" etc.) unless the list says there's no driver panel.
 - Use every driver who is IN the store before giving anyone a second trip. Never leave an in-store driver idle while an order is waiting for someone's second trip.
 - A returning driver only gets an order if every in-store driver is already out on a run.
+- Doubling or tripling is only for when there aren't enough drivers. Never double up one driver while another driver is free. Never mark a driver "not needed" or idle if any order is doubled up or waiting for a second trip.
 - No leave time can be earlier than NOW. "Go now" means leave at NOW.
 
 ` + RULES + `
